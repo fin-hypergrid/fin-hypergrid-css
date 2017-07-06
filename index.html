@@ -2,298 +2,97 @@
 <html>
 
 <head>
-    <meta http-equiv="Content-Type" content="text/html;charset=utf-8" >
-
-    <style>
-        body {
-            margin: 8px;
-        }
-        div#hypergrid, textarea, input#colNames {
-            position: absolute;
-            width: 49.5%;
-        }
-        div#hypergrid {
-            height: 75vh;
-        }
-        textarea, table, input#colNames {
-            right: 8px;
-            box-sizing: border-box;
-        }
-        textarea {
-            height: 70vh;
-            padding: 5px;
-            border: 1px solid black;
-            background-color: #eee;
-            font-family: monospace;
-            font-size: medium;
-        }
-        input#colNames {
-            top: 72vh;
-            border: 1px solid black;
-        }
-        table {
-            position: absolute;
-            bottom: 8px;
-            left: 8px;
-            width: calc(100% - 16px);
-            border: 1px dashed black;
-            border-collapse: collapse;
-        }
-        table td {
-            text-align: center;
-        }
-        th {
-            text-align: right;
-            border-right: 1px dashed black;
-            background-color: rgb(223, 227, 232)
-        }
-        tr.selected th {
-            background-color: rgba(255, 220, 97, 0.45)
-        }
-        th input {
-            float: left;
-        }
-    </style>
-
-    <style id="style-css"></style>
-
-    <script>
-        // Note that _regardless of input,_ values from getComputedStyle always have the following characteristics:
-        // Measurements: In pixels (have "px" appended), including 0 ("0px").
-        // Colors: Either in rgb or rgba format.
-
-        var RE_PIXELS = /^(\d*(\.\d*)?)px/;
-        var RE_COLOR = /^(rgb\(\d*(\.\d*)?(, \d*(\.\d*)?){2}|rgba\(\d*(\.\d*)?(, \d*(\.\d*)?){3})\)/;
-        var RE_FONT = /^(italic)?\s*(bold)?\s*(\d+px)?\s*(.*)$/;
-
-        window.onload = function() {
-            document.getElementById('colNames').value.replace(/,\s+/, ',').split(',').forEach(addColumn);
-
-            var source = document.getElementById('textarea-css');
-            source.onkeyup = stylesheetChanged;
-            source.onkeyup();
-        };
-
-        var stylers = [{
-            selector: 'tbody.header > tr.unselected > td',
-            backgroundColor: 'columnHeaderBackgroundColor',
-            color: 'columnHeaderColor',
-            font: 'columnHeaderFont',
-            halign: 'columnHeaderHalign'
-        }, {
-            selector: 'tbody.header > tr.selected > td',
-            backgroundColor: 'columnHeaderBackgroundSelectionColor',
-            color: 'columnHeaderForegroundSelectionColor',
-            font: 'columnHeaderForegroundSelectionFont'
-        }, {
-            selector: 'tbody.data > tr.unselected > th',
-            backgroundColor: 'rowHeaderBackgroundColor',
-            color: 'rowHeaderColor',
-            font: 'rowHeaderFont'
-        }, {
-            selector: 'tbody.data > tr.selected > th',
-            backgroundColor: 'rowHeaderBackgroundSelectionColor',
-            color: 'rowHeaderForegroundSelectionColor',
-            font: 'rowHeaderForegroundSelectionFont'
-        }, {
-            selector: 'tbody.data > tr.unselected > td',
-            backgroundColor: 'backgroundColor',
-            color: 'color',
-            font: 'font',
-            halign: 'halign'
-        }, {
-            selector: 'tbody.data > tr.selected > td',
-            backgroundColor: 'backgroundSelectionColor',
-            color: 'foregroundSelectionColor',
-            font: 'foregroundSelectionFont'
-        }];
-
-        function stylesheetChanged() {
-            var css = this.value;
-            document.getElementById('style-css').innerHTML = css;
-
-            var state = parseCSS();
-            console.log(state);
-            grid.setState(state);
-        }
-
-        function parseCSS() {
-            var state = {};
-            var a = assign.bind(state, 'table');
-
-            a('backgroundColor');
-            a('gridBorderTop', 'borderTopWidth', bool);
-            a('gridBorderRight', 'borderRightWidth', bool);
-            a('gridBorderBottom', 'borderBottomWidth', bool);
-            a('gridBorderLeft', 'borderLeftWidth', bool);
-
-            a = assign.bind(state, 'table td');
-            padding = a('cellPadding', 'padding');
-            a('defaultRowHeight', 'height', add.bind(null, 2 * padding));
-            a('lineWidth', 'borderWidth');
-            a('lineColor', 'borderColor');
-
-            stylers.forEach(function(set) {
-                a = assign.bind(state, set.selector);
-                a(set.backgroundColor, 'backgroundColor');
-                a(set.color, 'color');
-                a(set.halign, 'text-align');
-
-                var font = getFontDefault(set.font);
-                a = assign.bind(font, set.selector);
-                a('style', 'font-style');
-                a('weight', 'font-weight');
-                a('size', 'font-size');
-                a('family', 'font-family');
-                state[set.font] = [font.style, font.weight, font.size, font.family].join(' ').replace(/\s+/, ' ').trim();
-            });
-
-            return state;
-        }
-
-        function bool(n) { return !!n; }
-        function add(addend, n) { return n + addend; }
-
-        function getFontDefault(propName) {
-            var font = grid.constructor.defaults[propName];
-            var matches = font.match(RE_FONT);
-            font = {};
-            if (matches) {
-                if (matches[1]) { font.style = matches[1]; }
-                if (matches[2]) { font.weight = matches[2]; }
-                if (matches[3]) { font.size = matches[3]; }
-                if (matches[4]) { font.family = matches[4]; }
-            }
-            return font;
-        }
-
-        function assign(selector, propName, styleName, fudge) {
-            if (!selector) {
-                return;
-            }
-
-            var el = document.querySelector(selector),
-                styles = window.getComputedStyle(el),
-                styleValue = styles[styleName = styleName || propName];
-
-            switch (styleValue) {
-                case 'normal':
-                case 'none':
-                case 'auto':
-                case 'start':
-                case '':
-                case undefined:
-                    styleValue = undefined;
-                    break;
-
-                default:
-                    if ((matches = styleValue.match(RE_PIXELS))) {
-                        styleValue = styleName === 'font-size' ? matches[0] : Number(matches[1]);
-                    } else if ((matches = styleValue.match(RE_COLOR))) {
-                        styleValue = matches[0];
-                    }
-            }
-
-            if (styleValue !== undefined) {
-                if (fudge) {
-                    styleValue = fudge(styleValue);
-                }
-                this[propName] = styleValue;
-            } else {
-                this[propName] = grid.constructor.defaults[propName];
-            }
-
-            return styleValue;
-        }
-
-        function addColumn(colName) {
-            querySelectorAll('tr').forEach(function(tr) {
-                var td = document.createElement('td');
-                td.className = 'column-' + colName;
-                td.innerHTML = tr.parentElement.className === 'header'
-                        ? capitalize(colName)
-                        : tr.className === 'selected'
-                            ? 'Selected'
-                            : 'Data';
-                tr.appendChild(td);
-            });
-        }
-
-        function capitalize(string) {
-            return (/[a-z]/.test(string) ? string : string.toLowerCase())
-                    .replace(/[\s\-_]*([^\s\-_])([^\s\-_]+)/g, replacer)
-                    .replace(/[A-Z]/g, ' $&')
-                    .trim();
-        }
-
-        function replacer(a, b, c) {
-            return b.toUpperCase() + c;
-        }
-
-        function querySelectorAll(selector) {
-            return Array.prototype.slice.call(document.querySelectorAll(selector))
-        }
-    </script>
+    <meta http-equiv="Content-Type" content="text/html;charset=utf-8">
+    <link type="text/css" rel="stylesheet" href="css/index.css">
+    <style id="hypergrid-defaults"></style>
+    <style id="for-app-table-el"></style>
+    <script src="file:///Users/jonathan/repos/fin-hypergrid/demo/build/fin-hypergrid.js"></script>
+    <script src="build/grid.js"></script>
+    <script src="src/index.js"></script>
 </head>
 
 <body>
-    <div id="hypergrid"></div>
-    <textarea id="textarea-css">table {
-    border-width: 0px;
+    <div id="hypergrid-container"></div>
+    <input type="text" id="colNames" value="First, Last, Age, City, State, Phone">
+    <textarea id="textarea-css">
+/* Hypergrid cell defaults differ slightly from CSS cell defaults */
+th, td {
+    font-weight: normal;
+    text-align: center;
+}
 
-    font-size: 14pt;
-    font-family: sans-serif;
-    /*
-        above could also be expressed in a single line:
-        font: bold italic 14pt sans-serif;
-    */
+/* Define table borders (color disregarded; uses cell border color) */
+table {
+    /* border: 2px solid blue; */
+    background-color: orange;
 }
-td, th {
-    padding: 10px;
-    border: 1px solid blue;
+
+/* Define styles common to all cells */
+th, td {
+    font: 15px sans-serif;
+    height: 26px; /* default row height */
+    padding: 0 10px; /* Hypergrid only uses left and right padding */
+    border: 2px solid green;
 }
-tr.selected > td, tr.selected > th {
+
+/* "optional selectors" below merely support column selection
+ * toggle via column header click in proofing tool
+ */
+
+th {
+    background-color: lightgrey;
+    color: black;
+}
+tr > *.selected, /* optional selector */
+tr.selected > * {
     font-weight: bold;
 }
 tbody.header > tr.unselected > td {
     background-color: pink;
     color: red;
 }
+tbody.header > tr.unselected > td.selected, /* optional selector */
 tbody.header > tr.selected > td {
     background-color: violet;
     color: blue;
     font-style: italic;
 }
-tbody.data td {
-    text-align: left
-}
 tbody.data > tr.unselected > td {
-    background-color: #cde;
-    color: black;
-}
-tbody.data > tr.selected > td {
-    background-color: blue;
-    color: white;
-}
-tbody.data > tr.unselected > th {
-    background-color: #cde;
+    /*background-color: #cde;*/
     color: black;
 }
 tbody.data > tr.selected > th {
     background-color: blue;
     color: white;
 }
+tbody.data > tr.unselected > td.selected, /* optional selector */
+tbody.data > tr.selected > td {
+    background-color: blue;
+    color: white;
+}
+/* begin: Remove outside borders */
+th:first-child {
+    border-left: 0;
+}
+td:last-child {
+    border-right: 0;
+}
+tbody.header > tr:first-child > * {
+    border-top: 0;
+}
+tbody.data > tr:last-child > * {
+    border-bottom: 0;
+}
+/* end: Remove outside borders */
 </textarea>
 
-    <input type="text" id="colNames" value="First, Last, Age, City, State, Phone">
-
-    <table class="hypergrid-styles">
+    <table class="hypergrid-model">
         <tbody class="header">
-            <tr class="unselected">
+            <tr class="selected">
                 <th class="handle"><input type="checkbox"></th>
             </tr>
-            <tr class="selected">
-                <th></th>
+            <tr class="unselected">
+                <th class="handle"><input type="checkbox"></th>
             </tr>
         </tbody>
         <tbody class="data">
@@ -301,12 +100,17 @@ tbody.data > tr.selected > th {
                 <th class="handle"><input type="checkbox"> 1</th>
             </tr>
             <tr class="selected">
-                <th class="handle"><input type="checkbox"> 2</th>
+                <th class="handle"><input type="checkbox" checked> 2</th>
+            </tr>
+            <tr class="selected">
+                <th class="handle"><input type="checkbox" checked> 3</th>
+            </tr>
+            <tr class="unselected">
+                <th class="handle"><input type="checkbox"> 4</th>
             </tr>
         </tbody>
     </table>
 
-    <script src="build/index.js"></script>
 </body>
 
 </html>

@@ -5,7 +5,7 @@ var gulp = require('gulp'),
     browserify = require('gulp-browserify');
 
 gulp.task('default', function() {
-    return gulp.src('./src/index.js')
+    return gulp.src('./src/grid.js')
         .pipe(
             browserify({ debug: true })
                 .on('error', util.log)
